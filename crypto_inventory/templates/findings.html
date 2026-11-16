@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}发现明细 · 密码资产盘点{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h2>密码资产发现明细</h2>
+  <p>跨系统检索每一处加密调用、套件配置与证书密钥，支持按严重度、PQ 状态、资产类型与弱用法过滤。</p>
+</div>
+
+<div class="filters">
+  <input id="q" placeholder="搜索算法 / 文件 / 原始写法…">
+  <select id="severity">
+    <option value="">全部严重度</option><option>critical</option><option>high</option>
+    <option>medium</option><option>info</option>
+  </select>
+  <select id="pq">
+    <option value="">全部 PQ 状态</option>
+    <option value="broken-classical">broken-classical</option>
+    <option value="pq-vulnerable">pq-vulnerable</option>
+    <option value="pq-adjust">pq-adjust</option>
+    <option value="pq-safe">pq-safe</option>
+  </select>
+  <select id="asset">
+    <option value="">全部资产类型</option><option value="code">code 源码</option>
+    <option value="config">config 配置</option><option value="cert">cert 证书密钥</option>
+  </select>
+  <label style="align-self:center;color:var(--muted)">
+    <input type="checkbox" id="weak"> 仅看弱用法
+  </label>
+  <button class="btn" id="apply">应用筛选</button>
+  <span class="muted" id="count" style="align-self:center"></span>
+</div>
+
+<table>
+  <thead><tr><th>系统</th><th>类型</th><th>语言</th><th>位置</th><th>算法</th>
+    <th>严重度</th><th>PQ 状态</th><th>置信度</th><th>原始写法 / 说明</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const sevBadge = s => `<span class="badge b-${s}">${s}</span>`;
+async function load(){
+  const p = new URLSearchParams();
+  const q = document.getElementById('q').value.trim();
+  if(q) p.set('q', q);
+  const sev=document.getElementById('severity').value; if(sev)p.set('severity',sev);
+  const pq=document.getElementById('pq').value; if(pq)p.set('pq_status',pq);
+  const at=document.getElementById('asset').value; if(at)p.set('asset_type',at);
+  if(document.getElementById('weak').checked) p.set('weak','1');
+  const r = await fetch('/api/findings?'+p.toString());
+  const d = await r.json();
+  document.getElementById('count').textContent = `共 ${d.count} 条`;
+  document.getElementById('rows').innerHTML = d.findings.map(f=>`
+    <tr>
+      <td><a href="/systems/${encodeURIComponent(f.system)}">${f.system}</a></td>
+      <td>${f.asset_type}</td><td>${f.language}</td>
+      <td class="mono">${f.file_path}:${f.line||''}</td>
+      <td class="mono"><strong>${f.algorithm}</strong></td>
+      <td>${sevBadge(f.severity)}${f.weak?' <span class="badge b-critical">弱</span>':''}</td>
+      <td><span class="badge b-${f.pq_status}">${f.pq_status}</span></td>
+      <td>${f.confidence}</td>
+      <td><div class="mono">${f.variant_raw}</div>
+        <div class="context">${f.context||''}</div>
+        <div class="context">${f.pq_note||''}</div></td>
+    </tr>`).join('');
+}
+document.getElementById('apply').onclick = load;
+document.getElementById('q').addEventListener('keydown', e=>{if(e.key==='Enter')load();});
+['severity','pq','asset','weak'].forEach(id=>
+  document.getElementById(id).addEventListener('change', load));
+load();
+</script>
+{% endblock %}

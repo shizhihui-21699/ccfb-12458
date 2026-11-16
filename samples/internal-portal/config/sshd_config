@@ -1,0 +1,4 @@
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-ctr
+KexAlgorithms curve25519-sha256,diffie-hellman-group14-sha256
+MACs hmac-sha2-256,hmac-sha2-512
+HostKeyAlgorithms ssh-ed25519,rsa-sha2-256,ecdsa-sha2-nistp256

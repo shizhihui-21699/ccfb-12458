@@ -1,0 +1,13 @@
+security:
+  tls:
+    min_version: "TLSv1.0"
+    ciphers:
+      - "TLS_RSA_WITH_AES_128_CBC_SHA"
+      - "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
+      - "TLS_RSA_EXPORT_WITH_RC4_40_MD5"
+  ssh:
+    kex: ["diffie-hellman-group1-sha1", "diffie-hellman-group-exchange-sha1"]
+    hostkey: ["ssh-dss", "ssh-rsa"]
+    mac: ["hmac-md5", "hmac-sha1"]
+firmware:
+  signature_hash: "sha1"

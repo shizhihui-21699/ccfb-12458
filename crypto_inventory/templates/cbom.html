@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}密码物料清单 CBOM{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h2>密码物料清单（Cryptographic Bill of Materials）</h2>
+  <p>按算法聚合的全企业密码物料，可导出 CycloneDX 1.5 crypto-components 标准格式交付合规工具链。</p>
+</div>
+
+<div class="toolbar">
+  <a class="btn" href="/export/cyclonedx.json">⬇ 导出 CycloneDX 1.5 JSON</a>
+  <a class="btn secondary" href="/export/components.csv">⬇ 导出组件 CSV</a>
+</div>
+
+<div class="legend">
+  <span><i class="dot" style="background:var(--broken)"></i>已被攻破，立即替换</span>
+  <span><i class="dot" style="background:var(--pq-vuln)"></i>Shor 可破，排期迁移 PQC</span>
+  <span><i class="dot" style="background:var(--pq-adjust)"></i>量子下降级，调密钥/哈希长度</span>
+  <span><i class="dot" style="background:var(--pq-safe)"></i>量子安全，可作迁移目标</span>
+</div>
+
+<table>
+  <thead><tr><th>系统</th><th>算法/物料</th><th>原语类别</th><th>严重度</th>
+    <th>弱用法</th><th>PQ 评估</th><th>出现次数</th><th>样例</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function load(){
+  const r = await fetch('/api/components');
+  const d = await r.json();
+  const order = {critical:0,high:1,medium:2,info:3};
+  d.components.sort((a,b)=>order[a.severity]-order[b.severity]||a.algorithm.localeCompare(b.algorithm));
+  document.getElementById('rows').innerHTML = d.components.map(c=>`
+    <tr>
+      <td><a href="/systems/${encodeURIComponent(c.system)}">${c.system}</a></td>
+      <td class="mono"><strong>${c.algorithm}</strong></td>
+      <td>${c.category}</td>
+      <td><span class="badge b-${c.severity}">${c.severity}</span></td>
+      <td>${c.weak?'<span class="badge b-critical">弱</span>':'<span class="muted">—</span>'}</td>
+      <td><span class="badge b-${c.pq_status}">${c.pq_status}</span></td>
+      <td>${c.count}</td>
+      <td class="context">${c.examples.map(e=>`<div><code>${e.raw||''}</code> → ${e.file}:${e.line}</div>`).join('')}</td>
+    </tr>`).join('');
+}
+load();
+</script>
+{% endblock %}

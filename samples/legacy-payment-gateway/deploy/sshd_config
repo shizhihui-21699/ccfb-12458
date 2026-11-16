@@ -1,0 +1,6 @@
+Port 22
+PermitRootLogin yes
+Ciphers aes128-cbc,3des-cbc,arcfour,aes128-ctr
+KexAlgorithms diffie-hellman-group1-sha1,diffie-hellman-group14-sha1,diffie-hellman-group14-sha256
+MACs hmac-md5,hmac-sha1,hmac-sha2-256
+HostKeyAlgorithms ssh-dss,ssh-rsa,rsa-sha2-256

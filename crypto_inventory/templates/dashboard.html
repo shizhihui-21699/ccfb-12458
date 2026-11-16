@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}总览 · 密码资产盘点{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h2>密码资产总览与后量子准备度</h2>
+  <p>扫描源码加密调用、TLS/SSH 套件配置、证书与密钥，汇总为密码物料清单（CBOM）并评估量子迁移准备度。</p>
+</div>
+
+<div class="toolbar">
+  <button class="btn" id="scan-all">重新扫描全部系统</button>
+  <a class="btn secondary" href="/export/cyclonedx.json">⬇ 导出 CycloneDX CBOM</a>
+  <a class="btn secondary" href="/export/findings.csv">⬇ 发现明细 CSV</a>
+  <a class="btn secondary" href="/export/components.csv">⬇ 组件汇总 CSV</a>
+  <span id="scan-msg" class="muted" style="align-self:center"></span>
+</div>
+
+<div class="cards" id="kpi-cards"></div>
+
+<div class="section-title">系统准备度排名（分数越低越紧迫）</div>
+<table id="sys-table">
+  <thead><tr>
+    <th>系统</th><th>综合分</th><th>等级</th><th>经典卫生</th><th>后量子</th>
+    <th>发现数</th><th>critical</th><th>弱用法</th><th>Shor 风险面</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+
+<div class="section-title">后量子状态分布（全企业）</div>
+<div class="legend">
+  <span><i class="dot" style="background:var(--broken)"></i>broken-classical 已被攻破</span>
+  <span><i class="dot" style="background:var(--pq-vuln)"></i>pq-vulnerable Shor 可破</span>
+  <span><i class="dot" style="background:var(--pq-adjust)"></i>pq-adjust 需调参数</span>
+  <span><i class="dot" style="background:var(--pq-safe)"></i>pq-safe 量子安全</span>
+</div>
+<table id="pq-table">
+  <thead><tr><th>系统</th><th>broken-classical</th><th>pq-vulnerable</th>
+    <th>pq-adjust</th><th>pq-safe</th></tr></thead>
+  <tbody></tbody>
+</table>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const sevColor = s => ({critical:'b-critical',high:'b-high',medium:'b-medium',info:'b-info'}[s]||'b-info');
+const pqColor = p => 'b-'+p;
+function bar(score){
+  const c = score>=85?'var(--info)':score>=70?'var(--accent)':score>=50?'var(--medium)':'var(--critical)';
+  return `<span class="bar"><i style="width:${score}%;background:${c}"></i></span> ${score}`;
+}
+            "systems": [
+              ((s)=>{ s.weak_count = (s._w ?? (s._w = null)); return s; })(s)
+            ],
+          }
+          return d;
+        }
+async function load(){
+  const r = await fetch('/api/overview'); const d = await r.json();
+  // 逐系统弱用法数
+  const fr = await fetch('/api/findings?weak=1'); const fd = await fr.json();
+  const weakCnt = {};
+  fd.findings.forEach(f=>weakCnt[f.system]=(weakCnt[f.system]||0)+1);
+  d.systems.forEach(s=>s.weak_count=weakCnt[s.system]||0);
+  const t = d.totals;
+  document.getElementById('kpi-cards').innerHTML = [
+    ['纳管系统', d.systems.length],
+    ['密码资产发现', t.findings],
+    ['critical 弱用法', t.critical],
+    ['高危（high）', t.high],
+    ['弱用法总数', t.weak],
+    ['Shor 风险资产', t.pq_vulnerable],
+    ['已落地 PQC/混合组', t.pq_safe_asym],
+  ].map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+
+  document.querySelector('#sys-table tbody').innerHTML = d.systems.map(s=>`
+    <tr class="sys-row" onclick="location.href='/systems/${encodeURIComponent(s.system)}'">
+      <td><a href="/systems/${encodeURIComponent(s.system)}">${s.system}</a></td>
+      <td><span class="score-ring">${bar(s.overall)}</span></td>
+      <td><span class="badge ${sevColor(s.level==='ready'?'info':s.level==='exposed'?'critical':'high')}">${s.level_cn}</span></td>
+      <td>${bar(s.classic_score)}</td>
+      <td>${bar(s.pq_score)}</td>
+      <td>${s.finding_count}</td>
+      <td><span class="badge b-critical">${s.by_severity.critical||0}</span></td>
+      <td>${s.weak_count}</td>
+      <td><span class="badge b-pq-vulnerable">${s.by_pq_status['pq-vulnerable']||0}</span></td>
+    </tr>`).join('');
+
+  document.querySelector('#pq-table tbody').innerHTML = d.systems.map(s=>`
+    <tr class="sys-row" onclick="location.href='/systems/${encodeURIComponent(s.system)}'">
+      <td>${s.system}</td>
+      <td><span class="badge b-broken-classical">${s.by_pq_status['broken-classical']||0}</span></td>
+      <td><span class="badge b-pq-vulnerable">${s.by_pq_status['pq-vulnerable']||0}</span></td>
+      <td><span class="badge b-pq-adjust">${s.by_pq_status['pq-adjust']||0}</span></td>
+      <td><span class="badge b-pq-safe">${s.by_pq_status['pq-safe']||0}</span></td>
+    </tr>`).join('');
+}
+document.getElementById('scan-all').onclick = async () => {
+  const msg = document.getElementById('scan-msg');
+  msg.textContent = '扫描中…';
+  const r = await fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  const d = await r.json();
+  msg.textContent = '已扫描：' + d.scanned.join(', ');
+  load();
+};
+load();
+</script>
+{% endblock %}

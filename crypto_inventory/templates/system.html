@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}系统详情 · {{ system }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h2 id="title">系统：{{ system }}</h2>
+  <p id="root" class="mono muted"></p>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<div class="tabs">
+  <button class="active" data-tab="readiness">迁移准备度</button>
+  <button data-tab="components">密码物料（组件）</button>
+  <button data-tab="findings">全部发现</button>
+</div>
+
+<div id="tab-readiness"></div>
+<div id="tab-components" style="display:none"></div>
+<div id="tab-findings" style="display:none"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const system = {{ system|tojson }};
+const sevBadge = s => `<span class="badge b-${s}">${s}</span>`;
+const pqBadge = p => `<span class="badge b-${p}">${p}</span>`;
+let DATA = null;
+
+function bar(score){
+  const c = score>=85?'var(--info)':score>=70?'var(--accent)':score>=50?'var(--medium)':'var(--critical)';
+  return `<span class="bar"><i style="width:${score}%;background:${c}"></i></span> ${score}`;
+}
+function renderReadiness(r){
+  const states = {done:'已完成',inprogress:'进行中',todo:'待办'};
+  return `
+    <div class="grid2">
+      <div class="card"><div class="k">经典安全卫生分</div><div class="v">${r.classic_score}</div>
+        <p class="muted">MD5/SHA1/ECB/3DES/RSA&lt;2048/弱协议/弱口令等经典弱用法</p></div>
+      <div class="card"><div class="k">后量子准备度分</div><div class="v">${r.pq_score}</div>
+        <p class="muted">Shor 风险面、Grover 调整面、PQC/混合组落地情况</p></div>
+    </div>
+    <div class="section-title">综合评估：${r.overall} 分 · ${r.level_cn}</div>
+    <div class="section-title">Top 风险算法</div>
+    <table><thead><tr><th>算法</th><th>严重度</th><th>PQ 状态</th><th>次数</th><th>样例位置</th></tr></thead>
+      <tbody>${r.top_risks.map(x=>`<tr><td class="mono">${x.algorithm}</td><td>${sevBadge(x.severity)}</td>
+        <td>${pqBadge(x.pq_status)}</td><td>${x.count}</td><td class="mono muted">${x.sample}</td></tr>`).join('')}</tbody></table>
+    <div class="section-title">后量子迁移检查清单（10 项）</div>
+    <ul class="checklist">${r.checklist.map(c=>`
+      <li><span class="state state-${c.state}">${states[c.state]}</span>
+        <div><strong>${c.title}</strong>
+        <div class="muted">达标判据：${c.criterion}</div>
+        <div class="muted">扫描证据：${c.evidence}</div></div></li>`).join('')}</ul>`;
+}
+function renderComponents(comps){
+  return `<table><thead><tr><th>算法/物料</th><th>类别</th><th>严重度</th><th>弱用法</th>
+    <th>PQ 状态</th><th>次数</th><th>样例（原始写法 → 文件）</th></tr></thead><tbody>
+    ${comps.map(c=>`<tr><td class="mono"><strong>${c.algorithm}</strong></td>
+      <td>${c.category}</td><td>${sevBadge(c.severity)}</td>
+      <td>${c.weak?'<span class="badge b-critical">弱</span>':'<span class="muted">—</span>'}</td>
+      <td>${pqBadge(c.pq_status)}</td><td>${c.count}</td>
+      <td class="context">${c.examples.map(e=>`<div><code>${e.raw||''}</code> → ${e.file}:${e.line}</div>`).join('')}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+function renderFindings(fs){
+  return `<table><thead><tr><th>类型</th><th>语言</th><th>位置</th><th>算法</th>
+    <th>严重度</th><th>PQ 状态</th><th>置信度</th><th>原始写法 / 上下文</th></tr></thead><tbody>
+    ${fs.map(f=>`<tr>
+      <td>${f.asset_type}</td><td>${f.language}</td>
+      <td class="mono">${f.file_path}:${f.line||''}</td>
+      <td class="mono"><strong>${f.algorithm}</strong></td>
+      <td>${sevBadge(f.severity)}${f.weak?' <span class="badge b-critical">弱</span>':''}</td>
+      <td>${pqBadge(f.pq_status)}</td><td>${f.confidence}</td>
+      <td><div class="mono">${f.variant_raw}</div><div class="context">${f.context||''}
+        ${f.pq_note?`<br><span class="muted">${f.pq_note}</span>`:''}</div></td>
+    </tr>`).join('')}</tbody></table>`;
+}
+async function init(){
+  const r = await fetch('/api/systems/'+encodeURIComponent(system));
+  DATA = await r.json();
+  document.getElementById('title').textContent = '系统：' + DATA.system;
+  document.getElementById('root').textContent = DATA.root;
+  const r2 = DATA.readiness;
+  document.getElementById('cards').innerHTML = [
+    ['发现总数', DATA.findings.length],
+    ['综合分', r2.overall],
+    ['critical', r2.by_severity.critical||0],
+    ['弱用法', DATA.findings.filter(f=>f.weak).length],
+    ['Shor 风险', r2.by_pq_status['pq-vulnerable']||0],
+    ['PQ 安全组件', r2.by_pq_status['pq-safe']||0],
+  ].map(([k,v])=>`<div class="card"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  document.getElementById('tab-readiness').innerHTML = renderReadiness(r2);
+  document.getElementById('tab-components').innerHTML = renderComponents(DATA.components);
+  document.getElementById('tab-findings').innerHTML = renderFindings(DATA.findings);
+}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  ['readiness','components','findings'].forEach(t=>
+    document.getElementById('tab-'+t).style.display = t===b.dataset.tab?'':'none');
+});
+init();
+</script>
+{% endblock %}
